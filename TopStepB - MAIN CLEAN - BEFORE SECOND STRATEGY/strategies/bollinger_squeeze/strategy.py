@@ -6,6 +6,7 @@ Identifies low volatility periods (squeeze) and trades the subsequent breakouts.
 """
 import pandas as pd
 import numpy as np
+import torch
 from typing import Dict, Any, Union, Tuple, List
 
 from ..base import BaseStrategy
@@ -58,8 +59,9 @@ class BollingerSqueezeStrategy(BaseStrategy):
         
         self.validate_data(data)
         
-        # Calculate all indicators
-        indicators = calculate_all_indicators(data, params)
+        # Calculate all indicators (GPU aware)
+        use_gpu = getattr(self, 'use_gpu', None)
+        indicators = calculate_all_indicators(data, params, use_gpu=use_gpu)
         
         # Phase 1: Generate entry conditions (vectorized for performance)
         entry_signals = self._generate_entry_signals_vectorized(data, indicators, params)
@@ -146,32 +148,34 @@ class BollingerSqueezeStrategy(BaseStrategy):
                                           indicators: Dict, params: Dict[str, Any]) -> pd.Series:
         """Apply stateful position management using loop (mirrors deployment template)."""
         
-        # Initialize final signals
-        final_signals = pd.Series(0, index=data.index, dtype=np.int8)
-        
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        # Initialize final signals on chosen device
+        final_signals = torch.zeros(len(data), dtype=torch.int8, device=device)
+
         # State variables (identical to deployment template)
         position = 0
-        entry_price = 0.0
-        stop_loss = 0.0         # CRITICAL: Add stop-loss tracking
-        target_price = 0.0      # CRITICAL: Add R:R target tracking
+        entry_price = torch.tensor(0.0, device=device)
+        stop_loss = torch.tensor(0.0, device=device)
+        target_price = torch.tensor(0.0, device=device)
         bars_in_trade = 0
-        # Timing constraints removed for cleaner strategy logic
         bars_since_exit = 0
-        
-        # Convert to numpy for performance
-        high_prices = data['high'].to_numpy()
-        low_prices = data['low'].to_numpy()
-        close_prices = data['close'].to_numpy()
-        
+
+        # Convert price data and inputs to tensors
+        high_prices = torch.as_tensor(data['high'].to_numpy(), device=device, dtype=torch.float32)
+        low_prices = torch.as_tensor(data['low'].to_numpy(), device=device, dtype=torch.float32)
+        close_prices = torch.as_tensor(data['close'].to_numpy(), device=device, dtype=torch.float32)
+        entry_tensor = torch.as_tensor(entry_signals.to_numpy(), device=device, dtype=torch.int8)
+
         # Pre-extract indicators for all exit methods
-        atr = indicators['atr'].to_numpy()  # CRITICAL: ATR for stop-loss calculations
-        
+        atr = torch.as_tensor(indicators['atr'].to_numpy(), device=device, dtype=torch.float32)
+
         if params['exit_method'] == 'trailing_donchian':
-            exit_upper = indicators['exit_upper'].to_numpy()
-            exit_lower = indicators['exit_lower'].to_numpy()
+            exit_upper = torch.as_tensor(indicators['exit_upper'].to_numpy(), device=device, dtype=torch.float32)
+            exit_lower = torch.as_tensor(indicators['exit_lower'].to_numpy(), device=device, dtype=torch.float32)
         elif params['exit_method'] == 'opposite_band':
-            bb_upper = indicators['bb_upper'].to_numpy()
-            bb_lower = indicators['bb_lower'].to_numpy()
+            bb_upper = torch.as_tensor(indicators['bb_upper'].to_numpy(), device=device, dtype=torch.float32)
+            bb_lower = torch.as_tensor(indicators['bb_lower'].to_numpy(), device=device, dtype=torch.float32)
         
         for i in range(1, len(data)):
             # --- In a position: Check for exits ---
@@ -229,13 +233,12 @@ class BollingerSqueezeStrategy(BaseStrategy):
                 
                 # Check for entry
                 if True:
-                    entry_signal = entry_signals.iloc[i-1]  # Use previous bar's entry signal
-                    
+                    entry_signal = int(entry_tensor[i-1].item())
+
                     if entry_signal != 0:
                         position = entry_signal
                         # CRITICAL FIX: Entry at next bar's open (current bar index i, open price)
-                        # Signal generated on bar i-1, executed at bar i open price
-                        entry_price = data['open'].iloc[i]
+                        entry_price = torch.tensor(data['open'].iloc[i], device=device)
                         
                         # CRITICAL: Calculate stop-loss and target prices (matches deployment template)
                         if position == 1:  # Long position
@@ -254,11 +257,13 @@ class BollingerSqueezeStrategy(BaseStrategy):
                         bars_in_trade = 0
                         bars_since_exit = 0
                         entry_type = "long" if position == 1 else "short"
-                        self._debug_logger.debug(f"Bar {i}: {entry_type} entry at open price {entry_price}, stop: {stop_loss}, target: {target_price}")
-            
-            final_signals.iloc[i] = position
-        
-        return final_signals
+                        self._debug_logger.debug(
+                            f"Bar {i}: {entry_type} entry at open price {entry_price.item()}, stop: {stop_loss.item()}, target: {target_price.item()}"
+                        )
+
+            final_signals[i] = position
+
+        return pd.Series(final_signals.cpu().numpy(), index=data.index)
     
     def reset_state(self) -> None:
         """

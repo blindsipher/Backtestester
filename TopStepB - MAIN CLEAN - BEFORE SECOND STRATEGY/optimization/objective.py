@@ -34,6 +34,7 @@ from typing import Dict, Any, List, Callable, Optional, Union, Tuple
 from collections import defaultdict
 import optuna
 from optuna.trial import Trial
+import torch
 
 # No direct module imports - use orchestrated components from pipeline
 
@@ -56,14 +57,15 @@ class StatefulObjective:
     for parallel optimization (0.6s single → 0.6s parallel per trial).
     """
     
-    def __init__(self, 
+    def __init__(self,
                  strategy_class: type,
                  parameter_ranges: Dict[str, Union[Tuple, List]],
                  authorized_accesses: List[Any],  # AuthorizedDataAccess objects
                  trading_config: Any,
                  execution_config: Dict[str, Any],
                  composite_scorer: CompositeScore,
-                 config: OptimizationConfig):
+                 config: OptimizationConfig,
+                 device: Optional[str] = None):
         """
         Initialize objective with all required data (one-time setup).
         
@@ -84,6 +86,12 @@ class StatefulObjective:
         self.execution_config = execution_config
         self.composite_scorer = composite_scorer
         self.config = config
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        if self.device == "cuda":
+            try:
+                torch.cuda.set_device(0)
+            except Exception:
+                self.device = "cpu"
         
         # Store logger reference for trial execution
         self._logger = logging.getLogger(__name__)
@@ -595,6 +603,7 @@ class StatefulObjective:
         try:
             # Configure strategy with parameters
             strategy_instance.set_config(trading_config)
+            strategy_instance.use_gpu = (self.device == "cuda")
             
             # FIXED: Proper 3-way split implementation
             # PERFORMANCE OPTIMIZATION: Streamlined validation approach
@@ -1685,7 +1694,8 @@ class ObjectiveFactory:
         try:
             # Configure strategy with parameters
             strategy_instance.set_config(trading_config)
-            
+            strategy_instance.use_gpu = (self.device == "cuda")
+
             # FIXED: Proper 3-way split implementation
             # PERFORMANCE OPTIMIZATION: Streamlined validation approach
             contracts_per_trade = execution_config.get('contracts_per_trade', 1)
