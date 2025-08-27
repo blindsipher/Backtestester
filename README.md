@@ -330,7 +330,7 @@ mkdir packaging/
 
 ### **Project Structure Overview**
 ```
-TOPSTEPB/                          # Root project directory
+topstepb/                          # Root project directory
 ├── CLAUDE.md                      # This comprehensive documentation
 ├── main_runner.py                 # CLI entry point for all operations
 ├── app/                           # Core application orchestration

@@ -11,8 +11,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **CRITICAL: You are running in WSL but the program runs on Windows**
 - **Use Windows Python commands** - the program and dependencies are installed in Windows Python 3.13.3
-- **Execution Pattern**: Use `powershell.exe -Command "cd 'C:\Users\jacob\Desktop\TOPSTEPB'; C:\Users\jacob\AppData\Local\Programs\Python\Python313\python.exe [script] [args]"`  
-- **Path handling**: You're in `/mnt/c/Users/jacob/Desktop/TOPSTEPB` (WSL) but program runs in Windows
+- **Execution Pattern**: Use `powershell.exe -Command "cd 'C:\Users\jacob\Desktop\topstepb'; C:\Users\jacob\AppData\Local\Programs\Python\Python313\python.exe [script] [args]"`  
+- **Path handling**: You're in `/mnt/c/Users/jacob/Desktop/topstepb` (WSL) but program runs in Windows
 - **Database**: PostgreSQL on Windows (localhost:1127) accessible from WSL
 - **Dependencies**: pandas 2.2.3, optuna, psycopg2 installed in Windows Python environment
 - **GUI integration**: tkinter dialogs work with Windows display via WSL
@@ -28,46 +28,46 @@ This is an **enterprise-grade trading strategy optimization engine** specificall
 ### Primary Execution (Windows Python from WSL)
 ```bash
 # Main entry point - supports both CLI and interactive modes
-powershell.exe -Command "cd 'C:\Users\jacob\Desktop\TOPSTEPB'; C:\Users\jacob\AppData\Local\Programs\Python\Python313\python.exe main_runner.py"
+powershell.exe -Command "cd 'C:\Users\jacob\Desktop\topstepb'; C:\Users\jacob\AppData\Local\Programs\Python\Python313\python.exe main_runner.py"
 
 # CLI mode with full parameter specification (max-workers uses intelligent default based on CPU count)
-powershell.exe -Command "cd 'C:\Users\jacob\Desktop\TOPSTEPB'; C:\Users\jacob\AppData\Local\Programs\Python\Python313\python.exe main_runner.py --strategy bollinger_squeeze --symbol ES --timeframe 5m --account-type topstep_50k --slippage 0.5 --commission 2.50 --contracts-per-trade 1 --split-type chronological --max-trials 100"
+powershell.exe -Command "cd 'C:\Users\jacob\Desktop\topstepb'; C:\Users\jacob\AppData\Local\Programs\Python\Python313\python.exe main_runner.py --strategy bollinger_squeeze --symbol ES --timeframe 5m --account-type topstep_50k --slippage 0.5 --commission 2.50 --contracts-per-trade 1 --split-type chronological --max-trials 100"
 
 # Environment variable override for workers (affects all modes)
-powershell.exe -Command "cd 'C:\Users\jacob\Desktop\TOPSTEPB'; \$env:OPTUNA_MAX_WORKERS='4'; C:\Users\jacob\AppData\Local\Programs\Python\Python313\python.exe main_runner.py --strategy bollinger_squeeze --symbol ES --timeframe 5m --account-type topstep_50k --slippage 0.5 --commission 2.50 --contracts-per-trade 1 --split-type chronological --max-trials 100"
+powershell.exe -Command "cd 'C:\Users\jacob\Desktop\topstepb'; \$env:OPTUNA_MAX_WORKERS='4'; C:\Users\jacob\AppData\Local\Programs\Python\Python313\python.exe main_runner.py --strategy bollinger_squeeze --symbol ES --timeframe 5m --account-type topstep_50k --slippage 0.5 --commission 2.50 --contracts-per-trade 1 --split-type chronological --max-trials 100"
 
 # Short form using py.exe launcher (if available)
-powershell.exe -Command "cd 'C:\Users\jacob\Desktop\TOPSTEPB'; py.exe main_runner.py [args]"
+powershell.exe -Command "cd 'C:\Users\jacob\Desktop\topstepb'; py.exe main_runner.py [args]"
 
 # Interactive mode (launches automatically if no CLI args)
-powershell.exe -Command "cd 'C:\Users\jacob\Desktop\TOPSTEPB'; C:\Users\jacob\AppData\Local\Programs\Python\Python313\python.exe main_runner.py"
+powershell.exe -Command "cd 'C:\Users\jacob\Desktop\topstepb'; C:\Users\jacob\AppData\Local\Programs\Python\Python313\python.exe main_runner.py"
 ```
 
 ### Testing and Validation (Windows Python)
 ```bash
 # Run comprehensive test suite
-powershell.exe -Command "cd 'C:\Users\jacob\Desktop\TOPSTEPB'; py.exe -m pytest tests/ -v"
+powershell.exe -Command "cd 'C:\Users\jacob\Desktop\topstepb'; py.exe -m pytest tests/ -v"
 
 # Run specific Optuna integration tests
-powershell.exe -Command "cd 'C:\Users\jacob\Desktop\TOPSTEPB'; py.exe tests/test_optuna_integration.py"
+powershell.exe -Command "cd 'C:\Users\jacob\Desktop\topstepb'; py.exe tests/test_optuna_integration.py"
 
 # Test system configuration
-powershell.exe -Command "cd 'C:\Users\jacob\Desktop\TOPSTEPB'; py.exe -c \"from config.system_config import test_system_config; test_system_config()\""
+powershell.exe -Command "cd 'C:\Users\jacob\Desktop\topstepb'; py.exe -c \"from config.system_config import test_system_config; test_system_config()\""
 
 # Test utils module
-powershell.exe -Command "cd 'C:\Users\jacob\Desktop\TOPSTEPB'; py.exe -c \"from utils import test_utils_module; test_utils_module()\""
+powershell.exe -Command "cd 'C:\Users\jacob\Desktop\topstepb'; py.exe -c \"from utils import test_utils_module; test_utils_module()\""
 ```
 
 ### Development Commands (Windows Python)
 ```bash
 # Validate strategy discovery
-powershell.exe -Command "cd 'C:\Users\jacob\Desktop\TOPSTEPB'; py.exe -c \"from strategies import discover_strategies; print(list(discover_strategies().keys()))\""
+powershell.exe -Command "cd 'C:\Users\jacob\Desktop\topstepb'; py.exe -c \"from strategies import discover_strategies; print(list(discover_strategies().keys()))\""
 
 # Test data generation
-powershell.exe -Command "cd 'C:\Users\jacob\Desktop\TOPSTEPB'; py.exe -c \"from data import create_test_data; data=create_test_data(1000, 'ES'); print(f'Generated {len(data)} bars')\""
+powershell.exe -Command "cd 'C:\Users\jacob\Desktop\topstepb'; py.exe -c \"from data import create_test_data; data=create_test_data(1000, 'ES'); print(f'Generated {len(data)} bars')\""
 
 # Test system configuration
-powershell.exe -Command "cd 'C:\Users\jacob\Desktop\TOPSTEPB'; py.exe -c \"from config.system_config import test_system_config; test_system_config()\""
+powershell.exe -Command "cd 'C:\Users\jacob\Desktop\topstepb'; py.exe -c \"from config.system_config import test_system_config; test_system_config()\""
 ```
 
 ## 🎯 **EXECUTIVE SUMMARY**
@@ -381,7 +381,7 @@ mkdir packaging/
 
 ### **Project Structure Overview**
 ```
-TOPSTEPB/                          # Root project directory
+topstepb/                          # Root project directory
 ├── CLAUDE.md                      # This comprehensive documentation
 ├── main_runner.py                 # CLI entry point for all operations
 ├── app/                           # Core application orchestration
