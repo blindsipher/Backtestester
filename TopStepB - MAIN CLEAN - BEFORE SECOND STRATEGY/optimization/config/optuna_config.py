@@ -18,7 +18,7 @@ with emphasis on robust parameter discovery and efficient resource usage.
 
 import os
 from dataclasses import dataclass, field
-from typing import Dict, Any
+from typing import Dict, Any, List
 from pathlib import Path
 
 # Reference existing system configuration
@@ -168,9 +168,15 @@ class OptimizationLimits:
     
     # Memory limit per trial (MB) - Conservative 1500MB per worker
     memory_limit_mb: int = 1500
-    
+
     # CPU cores to use (0 = auto-detect)
     max_workers: int = 0
+
+    # GPU device selection (empty = auto-detect all)
+    gpu_device_ids: List[int] = field(default_factory=list)
+
+    # Per-worker GPU memory limit in MB (0 = no limit)
+    gpu_memory_limit_mb: int = 0
     
     # Checkpoint interval (save every N trials)
     checkpoint_interval: int = 50
@@ -264,6 +270,14 @@ class OptimizationConfig:
         # Override minimum trades threshold if set
         if 'OPTUNA_MIN_TRADES' in os.environ:
             self.limits.minimum_trades_threshold = max(1, int(os.environ['OPTUNA_MIN_TRADES']))
+
+        # GPU configuration overrides
+        if 'OPTUNA_GPU_DEVICES' in os.environ:
+            self.limits.gpu_device_ids = [
+                int(x) for x in os.environ['OPTUNA_GPU_DEVICES'].split(',') if x.strip().isdigit()
+            ]
+        if 'OPTUNA_GPU_MEMORY_MB' in os.environ:
+            self.limits.gpu_memory_limit_mb = int(os.environ['OPTUNA_GPU_MEMORY_MB'])
             
     
     def validate(self) -> bool:
@@ -310,6 +324,8 @@ class OptimizationConfig:
                 'results_top_n': self.limits.results_top_n,
                 'max_workers': self.limits.max_workers,
                 'minimum_trades_threshold': self.limits.minimum_trades_threshold,
+                'gpu_device_ids': self.limits.gpu_device_ids,
+                'gpu_memory_limit_mb': self.limits.gpu_memory_limit_mb,
             }
         }
 
