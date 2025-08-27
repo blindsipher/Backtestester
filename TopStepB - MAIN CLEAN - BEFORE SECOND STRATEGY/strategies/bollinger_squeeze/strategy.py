@@ -274,15 +274,21 @@ class BollingerSqueezeStrategy(BaseStrategy):
         execute_strategy() before each generate_signals() call.
         
         Stateful variables that must be reset:
-        - position: Current position (0=flat, 1=long, -1=short)  
+        - position: Current position (0=flat, 1=long, -1=short)
         - entry_price: Price at which current position was entered
+        - stop_loss: Current protective stop level
+        - target_price: Profit target level when using fixed R:R
         - bars_in_trade: Number of bars since position entry
         - bars_since_exit: Number of bars since last position exit
         """
-        # Note: This strategy uses stateful variables within the loop iteration
-        # but they are re-initialized at the start of _apply_stateful_position_management()
-        # so no persistent state variables need to be reset.
-        pass
+        # Initialize stateful attributes to their neutral defaults so repeated
+        # executions of the same strategy instance start from a clean slate.
+        self.position = 0
+        self.entry_price = 0.0
+        self.stop_loss = 0.0
+        self.target_price = 0.0
+        self.bars_in_trade = 0
+        self.bars_since_exit = 0
     
     def get_parameter_ranges(self) -> Dict[str, Union[Tuple[Union[int, float], ...], List[str]]]:
         """Return parameter ranges for optimization."""
