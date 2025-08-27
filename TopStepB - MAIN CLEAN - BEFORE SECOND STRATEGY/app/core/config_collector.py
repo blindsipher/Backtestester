@@ -91,10 +91,14 @@ def collect_cli_config() -> Optional[PipelineState]:
         return None
 
 
-def collect_interactive_config() -> PipelineState:
+def collect_interactive_config(data_file_override: Optional[str] = None) -> PipelineState:
     """
-    Collect configuration through interactive prompts
-    
+    Collect configuration through interactive prompts.
+
+    Args:
+        data_file_override: Optional path to a data file supplied via CLI.
+                            When provided, file selection prompts are skipped.
+
     Returns:
         PipelineState with user-provided configuration
     """
@@ -124,39 +128,42 @@ def collect_interactive_config() -> PipelineState:
     
     # Data file (optional)
     print("\n4. Data Configuration:")
-    data_file_path = None
+    data_file_path = data_file_override
     synthetic_bars = 5000
-    
-    use_file = input("Use data file? (y/N): ").strip().lower()
-    if use_file in ['y', 'yes']:
-        # Try to use tkinter file dialog
-        try:
-            import tkinter as tk
-            from tkinter import filedialog
-            print("Opening file dialog...")
-            root = tk.Tk()
-            root.withdraw()
-            root.attributes('-topmost', True)  # Bring to front on Windows
-            data_file_path = filedialog.askopenfilename(
-                title="Select Data File",
-                filetypes=[
-                    ("Trading Data", ("*.csv", "*.parquet", "*.CSV", "*.PARQUET")),
-                    ("CSV files", ("*.csv", "*.CSV")),
-                    ("Parquet files", ("*.parquet", "*.PARQUET")),
-                    ("All files", "*.*")
-                ]
-            )
-            root.destroy()
-            if not data_file_path:
-                print("No file selected, will use synthetic data")
-            else:
-                print(f"Selected file: {data_file_path}")
-        except (ImportError, Exception) as e:
-            print(f"File dialog failed ({e}), enter file path manually:")
-            data_file_path = input("Enter data file path (or press Enter for synthetic): ").strip()
-            if not data_file_path:
-                data_file_path = None
-    
+
+    if data_file_path:
+        print(f"Using data file provided via CLI: {data_file_path}")
+    else:
+        use_file = input("Use data file? (y/N): ").strip().lower()
+        if use_file in ['y', 'yes']:
+            # Try to use tkinter file dialog
+            try:
+                import tkinter as tk
+                from tkinter import filedialog
+                print("Opening file dialog...")
+                root = tk.Tk()
+                root.withdraw()
+                root.attributes('-topmost', True)  # Bring to front on Windows
+                data_file_path = filedialog.askopenfilename(
+                    title="Select Data File",
+                    filetypes=[
+                        ("Trading Data", ("*.csv", "*.parquet", "*.CSV", "*.PARQUET")),
+                        ("CSV files", ("*.csv", "*.CSV")),
+                        ("Parquet files", ("*.parquet", "*.PARQUET")),
+                        ("All files", "*.*")
+                    ]
+                )
+                root.destroy()
+                if not data_file_path:
+                    print("No file selected, will use synthetic data")
+                else:
+                    print(f"Selected file: {data_file_path}")
+            except (ImportError, Exception) as e:
+                print(f"File dialog failed ({e}), enter file path manually:")
+                data_file_path = input("Enter data file path (or press Enter for synthetic): ").strip()
+                if not data_file_path:
+                    data_file_path = None
+
     # Ask for synthetic data amount if not using file
     if not data_file_path:
         bars_input = input("Enter number of synthetic bars to generate (default: 5000): ").strip()

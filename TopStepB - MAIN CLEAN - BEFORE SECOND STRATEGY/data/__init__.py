@@ -17,8 +17,9 @@ from .data_loader import (
     # Main data loading classes
     DataLoader,
     InteractiveDataLoader,
-    
+
     # Utility functions
+    load_data_file,
     load_data_from_file,
     create_synthetic_data
 )
