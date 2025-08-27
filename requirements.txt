@@ -1,0 +1,6 @@
+pandas
+numpy
+optuna
+psycopg2-binary
+scikit-learn
+scipy

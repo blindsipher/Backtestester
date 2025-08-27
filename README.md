@@ -324,9 +324,13 @@ mkdir packaging/
 ## 🔧 **DEVELOPMENT ENVIRONMENT SETUP**
 
 ### **Required Dependencies**
-- **Python 3.8+** with pandas, numpy, optuna, psycopg2
+- **Python 3.8+** with dependencies listed in `requirements.txt`
 - **PostgreSQL** (optional, SQLite fallback available)
 - **Git** for version control and change tracking
+
+```bash
+pip install -r requirements.txt
+```
 
 ### **Project Structure Overview**
 ```
