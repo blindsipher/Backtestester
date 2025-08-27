@@ -1,5 +1,6 @@
 pandas
 numpy
+numba
 optuna
 psycopg2-binary
 scikit-learn

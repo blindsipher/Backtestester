@@ -6,13 +6,107 @@ Identifies low volatility periods (squeeze) and trades the subsequent breakouts.
 """
 import pandas as pd
 import numpy as np
-import torch
+from numba import njit
 from typing import Dict, Any, Union, Tuple, List
 
 from ..base import BaseStrategy
 from config.system_config import TradingConfig
 from .indicators import calculate_all_indicators
 from .parameters import get_default_parameters, get_parameter_ranges, validate_parameters
+
+
+@njit
+def _stateful_loop_jit(open_prices, high_prices, low_prices, close_prices, entry,
+                       atr, exit_upper, exit_lower, bb_upper, bb_lower,
+                       exit_method, stop_loss_atr_multiplier, risk_reward_ratio):
+    n = len(open_prices)
+    final_signals = np.zeros(n, dtype=np.int8)
+    entry_logs = np.zeros(n, dtype=np.int8)
+    exit_logs = np.zeros(n, dtype=np.int8)
+    entry_price_log = np.zeros(n, dtype=np.float64)
+    stop_log = np.zeros(n, dtype=np.float64)
+    target_log = np.zeros(n, dtype=np.float64)
+
+    position = 0
+    entry_price = 0.0
+    stop_loss = 0.0
+    target_price = 0.0
+    bars_in_trade = 0
+    bars_since_exit = 0
+
+    for i in range(1, n):
+        if position != 0:
+            bars_in_trade += 1
+            exit_triggered = False
+
+            if position == 1:
+                stop_hit = low_prices[i - 1] <= stop_loss
+            else:
+                stop_hit = high_prices[i - 1] >= stop_loss
+
+            if stop_hit:
+                exit_triggered = True
+                exit_logs[i] = 1 if position == 1 else -1
+            elif exit_method == 0:
+                if position == 1 and close_prices[i - 1] >= target_price:
+                    exit_triggered = True
+                    exit_logs[i] = 2
+                elif position == -1 and close_prices[i - 1] <= target_price:
+                    exit_triggered = True
+                    exit_logs[i] = -2
+            elif exit_method == 1:
+                if position == 1 and close_prices[i - 1] < exit_lower[i - 1]:
+                    exit_triggered = True
+                    exit_logs[i] = 3
+                elif position == -1 and close_prices[i - 1] > exit_upper[i - 1]:
+                    exit_triggered = True
+                    exit_logs[i] = -3
+            elif exit_method == 2:
+                if position == 1 and close_prices[i - 1] >= bb_upper[i - 1]:
+                    exit_triggered = True
+                    exit_logs[i] = 4
+                elif position == -1 and close_prices[i - 1] <= bb_lower[i - 1]:
+                    exit_triggered = True
+                    exit_logs[i] = -4
+
+            if exit_triggered:
+                position = 0
+                stop_loss = 0.0
+                target_price = 0.0
+                bars_since_exit = 1
+                bars_in_trade = 0
+        else:
+            if bars_since_exit > 0:
+                bars_since_exit += 1
+
+            entry_signal = entry[i - 1]
+
+            if entry_signal != 0:
+                position = int(entry_signal)
+                entry_price = open_prices[i]
+                if position == 1:
+                    stop_loss = entry_price - (atr[i - 1] * stop_loss_atr_multiplier)
+                    if exit_method == 0:
+                        target_price = entry_price + (entry_price - stop_loss) * risk_reward_ratio
+                    else:
+                        target_price = 0.0
+                else:
+                    stop_loss = entry_price + (atr[i - 1] * stop_loss_atr_multiplier)
+                    if exit_method == 0:
+                        target_price = entry_price - (stop_loss - entry_price) * risk_reward_ratio
+                    else:
+                        target_price = 0.0
+
+                bars_in_trade = 0
+                bars_since_exit = 0
+                entry_logs[i] = position
+                entry_price_log[i] = entry_price
+                stop_log[i] = stop_loss
+                target_log[i] = target_price
+
+        final_signals[i] = position
+
+    return final_signals, entry_logs, exit_logs, entry_price_log, stop_log, target_log
 
 
 class BollingerSqueezeStrategy(BaseStrategy):
@@ -144,126 +238,56 @@ class BollingerSqueezeStrategy(BaseStrategy):
         
         return entry_signals
     
-    def _apply_stateful_position_management(self, data: pd.DataFrame, entry_signals: pd.Series, 
+    def _apply_stateful_position_management(self, data: pd.DataFrame, entry_signals: pd.Series,
                                           indicators: Dict, params: Dict[str, Any]) -> pd.Series:
-        """Apply stateful position management using loop (mirrors deployment template)."""
-        
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        """Apply stateful position management using Numba for performance."""
+        self._debug_logger.debug(
+            "Applying stateful management via Numba JIT with vectorized stop-loss checks"
+        )
 
-        # Initialize final signals on chosen device
-        final_signals = torch.zeros(len(data), dtype=torch.int8, device=device)
+        open_prices = data['open'].to_numpy(dtype=np.float64)
+        high_prices = data['high'].to_numpy(dtype=np.float64)
+        low_prices = data['low'].to_numpy(dtype=np.float64)
+        close_prices = data['close'].to_numpy(dtype=np.float64)
+        entry_tensor = entry_signals.to_numpy(dtype=np.int8)
+        atr = indicators['atr'].to_numpy(dtype=np.float64)
 
-        # State variables (identical to deployment template)
-        position = 0
-        entry_price = torch.tensor(0.0, device=device)
-        stop_loss = torch.tensor(0.0, device=device)
-        target_price = torch.tensor(0.0, device=device)
-        bars_in_trade = 0
-        bars_since_exit = 0
+        exit_method_map = {'fixed_rr': 0, 'trailing_donchian': 1, 'opposite_band': 2}
+        exit_method = exit_method_map[params['exit_method']]
 
-        # Convert price data and inputs to tensors
-        high_prices = torch.as_tensor(data['high'].to_numpy(), device=device, dtype=torch.float32)
-        low_prices = torch.as_tensor(data['low'].to_numpy(), device=device, dtype=torch.float32)
-        close_prices = torch.as_tensor(data['close'].to_numpy(), device=device, dtype=torch.float32)
-        entry_tensor = torch.as_tensor(entry_signals.to_numpy(), device=device, dtype=torch.int8)
+        zeros = np.zeros(len(data), dtype=np.float64)
+        exit_upper = indicators.get('exit_upper', pd.Series(0, index=data.index)).to_numpy(dtype=np.float64) if exit_method == 1 else zeros
+        exit_lower = indicators.get('exit_lower', pd.Series(0, index=data.index)).to_numpy(dtype=np.float64) if exit_method == 1 else zeros
+        bb_upper = indicators.get('bb_upper', pd.Series(0, index=data.index)).to_numpy(dtype=np.float64) if exit_method == 2 else zeros
+        bb_lower = indicators.get('bb_lower', pd.Series(0, index=data.index)).to_numpy(dtype=np.float64) if exit_method == 2 else zeros
 
-        # Pre-extract indicators for all exit methods
-        atr = torch.as_tensor(indicators['atr'].to_numpy(), device=device, dtype=torch.float32)
+        final_signals, entry_logs, exit_logs, entry_prices, stops, targets = _stateful_loop_jit(
+            open_prices, high_prices, low_prices, close_prices, entry_tensor, atr,
+            exit_upper, exit_lower, bb_upper, bb_lower,
+            exit_method, params['stop_loss_atr_multiplier'], params['risk_reward_ratio']
+        )
 
-        if params['exit_method'] == 'trailing_donchian':
-            exit_upper = torch.as_tensor(indicators['exit_upper'].to_numpy(), device=device, dtype=torch.float32)
-            exit_lower = torch.as_tensor(indicators['exit_lower'].to_numpy(), device=device, dtype=torch.float32)
-        elif params['exit_method'] == 'opposite_band':
-            bb_upper = torch.as_tensor(indicators['bb_upper'].to_numpy(), device=device, dtype=torch.float32)
-            bb_lower = torch.as_tensor(indicators['bb_lower'].to_numpy(), device=device, dtype=torch.float32)
-        
-        for i in range(1, len(data)):
-            # --- In a position: Check for exits ---
-            if position != 0:
-                bars_in_trade += 1
-                exit_triggered = False
-                exit_reason = ""
-                
-                # PRIORITY 1: Stop-loss (most important) - matches deployment template
-                if position == 1 and close_prices[i-1] <= stop_loss:
-                    exit_triggered = True
-                    exit_reason = "stop_loss_long"
-                elif position == -1 and close_prices[i-1] >= stop_loss:
-                    exit_triggered = True
-                    exit_reason = "stop_loss_short"
-                
-                # PRIORITY 2: Exit method specific conditions (if no stop-loss hit)
-                elif params['exit_method'] == 'fixed_rr':
-                    if position == 1 and close_prices[i-1] >= target_price:
-                        exit_triggered = True
-                        exit_reason = "fixed_rr_long"
-                    elif position == -1 and close_prices[i-1] <= target_price:
-                        exit_triggered = True
-                        exit_reason = "fixed_rr_short"
-                        
-                elif params['exit_method'] == 'trailing_donchian':
-                    if position == 1 and close_prices[i-1] < exit_lower[i-1]:
-                        exit_triggered = True
-                        exit_reason = "trailing_donchian_long"
-                    elif position == -1 and close_prices[i-1] > exit_upper[i-1]:
-                        exit_triggered = True
-                        exit_reason = "trailing_donchian_short"
-                        
-                elif params['exit_method'] == 'opposite_band':
-                    if position == 1 and close_prices[i-1] >= bb_upper[i-1]:
-                        exit_triggered = True
-                        exit_reason = "opposite_band_long"
-                    elif position == -1 and close_prices[i-1] <= bb_lower[i-1]:
-                        exit_triggered = True
-                        exit_reason = "opposite_band_short"
-                
-                if exit_triggered:
-                    self._debug_logger.debug(f"Bar {i}: Exit triggered - {exit_reason}, bars_in_trade={bars_in_trade}")
-                    position = 0
-                    stop_loss = 0.0      # Reset exit levels
-                    target_price = 0.0
-                    bars_since_exit = 1
-                    bars_in_trade = 0
-                # else, hold position
-            
-            # --- Not in a position: Check for entries ---
-            else:
-                if bars_since_exit > 0:
-                    bars_since_exit += 1
-                
-                # Check for entry
-                if True:
-                    entry_signal = int(entry_tensor[i-1].item())
+        reason_map = {
+            1: 'stop_loss_long',
+            -1: 'stop_loss_short',
+            2: 'fixed_rr_long',
+            -2: 'fixed_rr_short',
+            3: 'trailing_donchian_long',
+            -3: 'trailing_donchian_short',
+            4: 'opposite_band_long',
+            -4: 'opposite_band_short',
+        }
 
-                    if entry_signal != 0:
-                        position = entry_signal
-                        # CRITICAL FIX: Entry at next bar's open (current bar index i, open price)
-                        entry_price = torch.tensor(data['open'].iloc[i], device=device)
-                        
-                        # CRITICAL: Calculate stop-loss and target prices (matches deployment template)
-                        if position == 1:  # Long position
-                            stop_loss = entry_price - (atr[i-1] * params['stop_loss_atr_multiplier'])
-                            if params['exit_method'] == 'fixed_rr':
-                                target_price = entry_price + (entry_price - stop_loss) * params['risk_reward_ratio']
-                            else:
-                                target_price = 0.0
-                        else:  # Short position
-                            stop_loss = entry_price + (atr[i-1] * params['stop_loss_atr_multiplier'])
-                            if params['exit_method'] == 'fixed_rr':
-                                target_price = entry_price - (stop_loss - entry_price) * params['risk_reward_ratio']
-                            else:
-                                target_price = 0.0
-                        
-                        bars_in_trade = 0
-                        bars_since_exit = 0
-                        entry_type = "long" if position == 1 else "short"
-                        self._debug_logger.debug(
-                            f"Bar {i}: {entry_type} entry at open price {entry_price.item()}, stop: {stop_loss.item()}, target: {target_price.item()}"
-                        )
+        for i in range(len(data)):
+            if entry_logs[i] != 0:
+                etype = 'long' if entry_logs[i] == 1 else 'short'
+                self._debug_logger.debug(
+                    f"Bar {i}: {etype} entry at open price {entry_prices[i]}, stop: {stops[i]}, target: {targets[i]}"
+                )
+            if exit_logs[i] != 0:
+                self._debug_logger.debug(f"Bar {i}: Exit triggered - {reason_map[exit_logs[i]]}")
 
-            final_signals[i] = position
-
-        return pd.Series(final_signals.cpu().numpy(), index=data.index)
+        return pd.Series(final_signals, index=data.index)
     
     def reset_state(self) -> None:
         """
