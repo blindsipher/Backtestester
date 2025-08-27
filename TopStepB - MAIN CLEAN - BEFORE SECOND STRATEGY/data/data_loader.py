@@ -81,12 +81,21 @@ class DataLoader:
             raise
 
 
+def load_data_file(file_path: str) -> pd.DataFrame:
+    """Load data from a file path without any interactive prompts."""
+    loader = DataLoader()
+    return loader.load_file(file_path)
+
+
+# Backwards compatibility alias
+def load_data_from_file(file_path: str) -> pd.DataFrame:
+    """Compatibility wrapper for load_data_file."""
+    return load_data_file(file_path)
+
+
 class InteractiveDataLoader:
     """Interactive data loader with GUI file picker"""
-    
-    def __init__(self):
-        self.loader = DataLoader()
-    
+
     def load_data_interactive(self) -> Optional[pd.DataFrame]:
         """
         Interactive data loading with GUI file picker
@@ -169,7 +178,7 @@ class InteractiveDataLoader:
             
             if file_path:
                 print(f"Selected: {file_path}")
-                return self.loader.load_file(file_path)
+                return load_data_file(file_path)
             else:
                 print("No file selected")
                 return None
@@ -219,7 +228,7 @@ class InteractiveDataLoader:
             if 1 <= choice <= len(found_files):
                 selected_file = found_files[choice - 1]
                 print(f"Loading: {selected_file}")
-                return self.loader.load_file(str(selected_file))
+                return load_data_file(str(selected_file))
             elif choice == len(found_files) + 1:
                 return self._manual_file_input()
             else:
@@ -253,7 +262,7 @@ class InteractiveDataLoader:
                 continue
             
             try:
-                return self.loader.load_file(file_path)
+                return load_data_file(file_path)
             except Exception as e:
                 print(f"Error loading file: {e}")
                 continue
@@ -277,22 +286,6 @@ class InteractiveDataLoader:
         except ValueError:
             print("Invalid input, using defaults")
             return create_synthetic_data()
-
-
-def load_data_from_file(file_path: str) -> pd.DataFrame:
-    """
-    Convenience function to load data from file
-    
-    Args:
-        file_path: Path to data file
-        
-    Returns:
-        DataFrame with loaded data
-    """
-    loader = DataLoader()
-    return loader.load_file(file_path)
-
-
 def interactive_data_setup() -> pd.DataFrame:
     """
     Convenience function for interactive data loading

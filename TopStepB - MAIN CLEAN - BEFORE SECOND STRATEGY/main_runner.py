@@ -10,6 +10,7 @@ Database management is handled by the optimization module through its
 existing StorageConfig system in optimization/config/optuna_config.py.
 """
 
+import argparse
 import logging
 import sys
 
@@ -22,13 +23,22 @@ def main():
     """Main entry point - detect mode and orchestrate pipeline"""
 
     try:
+        # Extract optional data file argument without triggering CLI mode
+        parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument('--data-file')
+        args, remaining = parser.parse_known_args()
+        data_file = args.data_file
+        sys.argv = [sys.argv[0]] + remaining
+
         # Collect configuration based on mode
         if is_cli_mode():
+            if data_file:
+                sys.argv.extend(['--data-file', data_file])
             state = collect_cli_config()
             if state is None:
                 return 1  # CLI parsing failed or --help
         else:
-            state = collect_interactive_config()
+            state = collect_interactive_config(data_file_override=data_file)
 
         # Orchestrate the pipeline - optimization module handles PostgreSQL internally
         result = orchestrate_pipeline(state)
