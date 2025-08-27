@@ -30,6 +30,12 @@ from typing import Dict, Any, List, Optional, Callable
 import threading
 import queue
 
+# Optional GPU support
+try:
+    import torch
+except Exception:  # pragma: no cover - torch may be unavailable
+    torch = None
+
 from optuna.study import Study
 from optuna.trial import Trial
 
@@ -66,13 +72,33 @@ class ParallelOptimizer:
             'memory_per_worker_mb': 1500,  # Will be empirically tuned in Phase 2
             'total_memory_limit_mb': optimized_total_memory_mb  # FIXED: Dynamic calculation
         }
-        
+
         # Runtime state
         self.active_workers = 0
         self.total_memory_usage = 0
         self.optimization_start_time = 0
         self.progress_queue = queue.Queue()
         self.stop_event = threading.Event()
+
+        # GPU management
+        self.available_gpus: List[int] = []
+        if torch and torch.cuda.is_available():
+            try:
+                detected = list(range(torch.cuda.device_count()))
+                if config.limits.gpu_device_ids:
+                    self.available_gpus = [g for g in config.limits.gpu_device_ids if g in detected]
+                else:
+                    self.available_gpus = detected
+            except Exception as e:  # pragma: no cover - defensive
+                logger.warning(f"GPU detection failed: {e}")
+                self.available_gpus = []
+        self.gpu_memory_limit_mb = config.limits.gpu_memory_limit_mb
+        self.worker_gpu_map: Dict[int, int] = {}
+
+        if self.available_gpus:
+            logger.info(f"Detected GPUs: {self.available_gpus}")
+        else:
+            logger.info("No GPUs detected or torch unavailable")
         
         logger.info(f"ParallelOptimizer initialized: "
                    f"max_workers={self.worker_config['safe_max_workers']}, "
@@ -217,12 +243,40 @@ class ParallelOptimizer:
             # Instead of using ProcessPoolExecutor which has pickling issues,
             # we run Optuna's optimize directly in the main process with n_jobs
             # This avoids pickling the objective function closure
-            
+
             logger.info(f"Running Optuna optimization with n_jobs={n_jobs}")
-            
+            # Prepare GPU assignments
+            if self.available_gpus:
+                self.worker_gpu_map = {
+                    i: self.available_gpus[i % len(self.available_gpus)]
+                    for i in range(n_jobs)
+                }
+                logger.info(f"GPU assignments: {self.worker_gpu_map}")
+
+                def gpu_objective(trial: Trial) -> float:
+                    proc = mp.current_process()
+                    idx = (proc._identity[0] - 1) if proc._identity else 0
+                    gpu_id = self.worker_gpu_map.get(idx, self.available_gpus[idx % len(self.available_gpus)])
+                    if torch:
+                        try:
+                            torch.cuda.set_device(gpu_id)
+                            if self.gpu_memory_limit_mb > 0:
+                                try:
+                                    total = torch.cuda.get_device_properties(gpu_id).total_memory // (1024 * 1024)
+                                    frac = min(1.0, self.gpu_memory_limit_mb / total)
+                                    torch.cuda.set_per_process_memory_fraction(frac, device=gpu_id)
+                                except Exception as e:  # pragma: no cover - depends on torch version
+                                    logger.debug(f"GPU memory limit not applied: {e}")
+                        except Exception as e:  # pragma: no cover
+                            logger.warning(f"Failed to set GPU {gpu_id} for worker {idx}: {e}")
+                    return objective(trial)
+
+            else:
+                gpu_objective = objective
+
             # Run optimization directly with Optuna's native parallelism
             study.optimize(
-                objective,
+                gpu_objective,
                 n_trials=n_trials,
                 n_jobs=n_jobs,
                 timeout=timeout,
@@ -321,17 +375,44 @@ class ParallelOptimizer:
                         eta_minutes = remaining_trials / trials_per_minute
                     else:
                         eta_minutes = 0
-                    
-                    logger.info(f"Optimization progress: {current_trials}/{target_trials} trials "
-                               f"({progress_percent:.1f}%), {trials_per_minute:.1f} trials/min, "
-                               f"ETA: {eta_minutes:.1f}min, Memory: {memory_usage}MB, CPU: {cpu_percent:.1f}%")
+
+                    gpu_log = ""
+                    if self.available_gpus and torch:
+                        gpu_stats = []
+                        for gid in self.available_gpus:
+                            try:
+                                util = torch.cuda.utilization(gid) if hasattr(torch.cuda, "utilization") else 0
+                                mem_alloc = torch.cuda.memory_allocated(gid) // (1024 * 1024)
+                                mem_total = torch.cuda.get_device_properties(gid).total_memory // (1024 * 1024)
+                                gpu_stats.append(f"GPU{gid}: {util}% {mem_alloc}/{mem_total}MB")
+                            except Exception:
+                                continue
+                        gpu_log = ", GPU: " + "; ".join(gpu_stats) if gpu_stats else ""
+
+                    logger.info(
+                        f"Optimization progress: {current_trials}/{target_trials} trials "
+                        f"({progress_percent:.1f}%), {trials_per_minute:.1f} trials/min, "
+                        f"ETA: {eta_minutes:.1f}min, Memory: {memory_usage}MB, CPU: {cpu_percent:.1f}%"
+                        f"{gpu_log}"
+                    )
                     
                     # Check for resource issues
                     if memory_usage > self.config.limits.memory_limit_mb * 1.5:
                         logger.warning(f"High memory usage detected: {memory_usage}MB")
-                    
+
                     if cpu_percent > 95:
                         logger.warning(f"High CPU usage detected: {cpu_percent}%")
+
+                    if self.available_gpus and torch and self.gpu_memory_limit_mb > 0:
+                        for gid in self.available_gpus:
+                            try:
+                                mem_alloc = torch.cuda.memory_allocated(gid) // (1024 * 1024)
+                                if mem_alloc > self.gpu_memory_limit_mb * 1.5:
+                                    logger.warning(
+                                        f"High GPU{gid} memory usage detected: {mem_alloc}MB"
+                                    )
+                            except Exception:
+                                continue
                     
                     last_trial_count = current_trials
                     last_log_time = current_time
@@ -351,14 +432,29 @@ class ParallelOptimizer:
     def get_resource_usage_report(self) -> Dict[str, Any]:
         """
         Get current resource usage report.
-        
+
         Returns:
             Dictionary with resource usage statistics
         """
         try:
             memory = psutil.virtual_memory()
             cpu_percent = psutil.cpu_percent(interval=1)
-            
+            gpu_info = []
+            if self.available_gpus and torch:
+                for gid in self.available_gpus:
+                    try:
+                        util = torch.cuda.utilization(gid) if hasattr(torch.cuda, "utilization") else 0
+                        mem_alloc = torch.cuda.memory_allocated(gid) // (1024 * 1024)
+                        mem_total = torch.cuda.get_device_properties(gid).total_memory // (1024 * 1024)
+                        gpu_info.append({
+                            'id': gid,
+                            'util_percent': util,
+                            'memory_used_mb': mem_alloc,
+                            'memory_total_mb': mem_total
+                        })
+                    except Exception:
+                        continue
+
             return {
                 'memory_total_mb': memory.total // (1024 * 1024),
                 'memory_available_mb': memory.available // (1024 * 1024),
@@ -366,14 +462,15 @@ class ParallelOptimizer:
                 'memory_percent': memory.percent,
                 'cpu_percent': cpu_percent,
                 'cpu_count': mp.cpu_count(),
+                'gpu': gpu_info,
                 'active_workers': self.active_workers,
                 'optimization_running': not self.stop_event.is_set()
             }
-            
+
         except Exception as e:
             logger.error(f"Failed to get resource usage: {e}")
             return {'error': str(e)}
-    
+
     def cleanup(self) -> None:
         """Clean up resources and stop monitoring"""
         self.stop_event.set()
