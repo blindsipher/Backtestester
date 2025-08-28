@@ -23,58 +23,81 @@ from .core.pipeline_orchestrator import PipelineOrchestrator
 
 logger = logging.getLogger(__name__)
 
+
+def _load_data(state: PipelineState) -> tuple[bool, str | None]:
+    """Load or generate data based on state configuration."""
+
+    state.update_phase("data_loading")
+    if state.data_file_path:
+        logger.info(f"Loading data from file: {state.data_file_path}")
+        full_data = load_data_from_file(state.data_file_path)
+    else:
+        logger.info(
+            f"Creating synthetic test data with {state.synthetic_bars} bars"
+        )
+        full_data = create_test_data(bars=state.synthetic_bars, symbol=state.symbol)
+
+    if full_data is None or full_data.empty:
+        return False, "Data loading resulted in empty dataset"
+
+    state.full_data = full_data
+    logger.info(f"Data loading phase completed: {len(full_data)} bars loaded")
+    return True, None
+
+
+def _discover_strategy(state: PipelineState) -> tuple[bool, Dict[str, Any] | None, str | None]:
+    """Locate and instantiate the requested strategy."""
+
+    state.update_phase("strategy_discovery")
+    available_strategies = discover_strategies()
+
+    if state.strategy_name not in available_strategies:
+        available_list = list(available_strategies.keys())
+        error = (
+            f"Strategy '{state.strategy_name}' not found. Available: {available_list}"
+        )
+        return False, None, error
+
+    strategy_class = available_strategies[state.strategy_name]
+    strategy_instance = strategy_class()
+    state.strategy_instance = strategy_instance
+    logger.info(f"Strategy discovery phase completed: {state.strategy_name}")
+
+    strategy_result = {
+        "success": True,
+        "name": state.strategy_name,
+        "class": strategy_class,
+        "instance": strategy_instance,
+        "parameter_ranges": strategy_instance.get_parameter_ranges(),
+        "available_strategies": list(available_strategies.keys()),
+    }
+    return True, strategy_result, None
+
+
 def orchestrate_pipeline(state: PipelineState) -> Dict[str, Any]:
     """
     Orchestrate the complete pipeline by delegating to existing modules directly.
-    
+
     Args:
         state: PipelineState with user configuration
-        
+
     Returns:
         Dictionary with pipeline results and complete configuration
     """
-    
+
     try:
         setup_logging()
         logger.info(f"Starting pipeline orchestration for {state.strategy_name}")
-        
+
         # Phase 1: Data Loading - Delegate to data module
-        state.update_phase("data_loading")
-        if state.data_file_path:
-            logger.info(f"Loading data from file: {state.data_file_path}")
-            full_data = load_data_from_file(state.data_file_path)
-        else:
-            logger.info(f"Creating synthetic test data with {state.synthetic_bars} bars")
-            full_data = create_test_data(bars=state.synthetic_bars, symbol=state.symbol)
-        
-        if full_data is None or full_data.empty:
-            return _create_error_result(state, 'Data loading resulted in empty dataset')
-        
-        state.full_data = full_data
-        logger.info(f"Data loading phase completed: {len(full_data)} bars loaded")
-        
+        success, error_msg = _load_data(state)
+        if not success:
+            return _create_error_result(state, error_msg or "Data loading failed")
+
         # Phase 2: Strategy Discovery - Delegate to strategies module
-        state.update_phase("strategy_discovery")
-        available_strategies = discover_strategies()
-        
-        if state.strategy_name not in available_strategies:
-            available_list = list(available_strategies.keys())
-            error = f"Strategy '{state.strategy_name}' not found. Available: {available_list}"
-            return _create_error_result(state, error)
-        
-        strategy_class = available_strategies[state.strategy_name]
-        strategy_instance = strategy_class()
-        state.strategy_instance = strategy_instance
-        logger.info(f"Strategy discovery phase completed: {state.strategy_name}")
-        
-        strategy_result = {
-            'success': True,
-            'name': state.strategy_name,
-            'class': strategy_class,
-            'instance': strategy_instance,
-            'parameter_ranges': strategy_instance.get_parameter_ranges(),
-            'available_strategies': list(available_strategies.keys())
-        }
+        success, strategy_result, error_msg = _discover_strategy(state)
+        if not success:
+            return _create_error_result(state, error_msg or "Strategy discovery failed")
         
         # Phase 3: Trading Configuration - Delegate to config module
         state.update_phase("trading_config")
@@ -156,8 +179,42 @@ def orchestrate_pipeline(state: PipelineState) -> Dict[str, Any]:
             error_msg = f"Parameter optimization failed: {e}"
             logger.warning(f"Optimization failed, continuing without optimization: {error_msg}")
             state.optimization_result = {'skipped': True, 'error': error_msg}
-        
-        # Phase 6: Deployment (if optimization results are available)
+
+        # Phase 6: Validation - run basic validation on parameter sets
+        if state.best_parameters:
+            state.update_phase("validation")
+            from validation import ValidationEngine, ValidationConfig
+
+            val_engine = ValidationEngine(ValidationConfig())
+            state.validation_results = val_engine.run(state.best_parameters)
+        else:
+            state.validation_results = []
+
+        # Phase 7: Analytics - select top parameter sets
+        if state.validation_results:
+            state.update_phase("analytics")
+            from analytics import AnalyticsEngine
+
+            analytics = AnalyticsEngine(max_size=state.results_top_n)
+            analytics.ingest(state.validation_results)
+            winners = analytics.get_winners()
+            state.analytics_winners = winners
+            # Only keep winning parameter sets for downstream phases
+            state.best_parameters = [w['params'] for w in winners]
+        else:
+            state.analytics_winners = []
+
+        # Phase 8: Packaging - prepare winners for deployment
+        if state.analytics_winners:
+            state.update_phase("packaging")
+            from packager import PackagingEngine
+
+            pkg_engine = PackagingEngine()
+            state.packaging_result = pkg_engine.package(state.strategy_name, state.analytics_winners)
+        else:
+            state.packaging_result = {'success': False, 'packages': []}
+
+        # Phase 9: Deployment (if optimization results are available)
         if state.best_parameters and len(state.best_parameters) > 0:
             state.update_phase("deployment")
             from deployment import DeploymentEngine
@@ -192,8 +249,8 @@ def orchestrate_pipeline(state: PipelineState) -> Dict[str, Any]:
         else:
             logger.info("Skipping deployment phase - no optimization results available")
             state.deployment_result = {'skipped': True, 'reason': 'No optimization results'}
-        
-        # Phase 7: Final Assembly
+
+        # Final Assembly
         state.update_phase("complete")
         result = _create_success_result(state, strategy_result, split_result)
         
@@ -268,7 +325,15 @@ def _create_success_result(state: PipelineState, strategy_config: Dict, split_re
         'ready_for_deployment': True,
         'summary': state.get_summary()
     }
-    
+
+    # Include validation and analytics results if available
+    if getattr(state, 'validation_results', None) is not None:
+        result['validation_results'] = state.validation_results
+    if getattr(state, 'analytics_winners', None) is not None:
+        result['analytics_winners'] = state.analytics_winners
+    if getattr(state, 'packaging_result', None) is not None:
+        result['packaging_result'] = state.packaging_result
+
     # Include optimization results if available
     if state.optimization_result:
         result['optimization_result'] = state.optimization_result
