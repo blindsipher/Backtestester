@@ -379,11 +379,11 @@ print(f"Full summary: {data_split.summary()}")
 
 3-WAY SPLIT BENEFITS:
 ====================
-NEW (3-way): optimize_data, validate_data, test_data
+The system uses explicit ``train``, ``validation`` and ``test`` segments.
 
-- optimize_data: Used for parameter tuning during optimization
-- validate_data: Used for evaluation during optimization (out-of-sample)
-- test_data: Reserved for final validation (never seen during optimization)
+- ``train``: Used for parameter tuning during optimization
+- ``validation``: Used for evaluation during optimization (out-of-sample)
+- ``test``: Reserved for final validation (never seen during optimization)
 
 This eliminates data leakage by ensuring optimization never sees test data.
 """

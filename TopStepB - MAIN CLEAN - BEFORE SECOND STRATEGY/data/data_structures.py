@@ -26,7 +26,7 @@ class DataSplit:
     separate datasets for training, validation, and testing.
     
     Fields:
-        train: DataFrame used for parameter tuning and model fitting (institutional terminology)
+        train: DataFrame used for parameter tuning and model fitting
         validation: DataFrame used for performance evaluation during optimization
         test: DataFrame reserved for final validation (unused during optimization)
         metadata: Dictionary containing split information and timestamps
@@ -249,31 +249,31 @@ if __name__ == "__main__":
     # Create test data with temporal ordering
     base_date = datetime(2020, 1, 1)
     
-    # Optimize data: Jan-Jun 2020
-    optimize_dates = pd.date_range(base_date, base_date + timedelta(days=180), freq='1h')
-    optimize_data = pd.DataFrame({
-        'datetime': optimize_dates,
-        'open': np.random.randn(len(optimize_dates)).cumsum() + 100,
-        'high': np.random.randn(len(optimize_dates)).cumsum() + 102,
-        'low': np.random.randn(len(optimize_dates)).cumsum() + 98,
-        'close': np.random.randn(len(optimize_dates)).cumsum() + 101,
-        'volume': np.random.randint(1000, 10000, len(optimize_dates))
+    # Train data: Jan-Jun 2020
+    train_dates = pd.date_range(base_date, base_date + timedelta(days=180), freq='1h')
+    train_data = pd.DataFrame({
+        'datetime': train_dates,
+        'open': np.random.randn(len(train_dates)).cumsum() + 100,
+        'high': np.random.randn(len(train_dates)).cumsum() + 102,
+        'low': np.random.randn(len(train_dates)).cumsum() + 98,
+        'close': np.random.randn(len(train_dates)).cumsum() + 101,
+        'volume': np.random.randint(1000, 10000, len(train_dates))
     })
-    
-    # Validate data: Jul-Sep 2020 (with 1-day gap)
-    validate_start = base_date + timedelta(days=181)
-    validate_dates = pd.date_range(validate_start, validate_start + timedelta(days=90), freq='1h')
-    validate_data = pd.DataFrame({
-        'datetime': validate_dates,
-        'open': np.random.randn(len(validate_dates)).cumsum() + 100,
-        'high': np.random.randn(len(validate_dates)).cumsum() + 102,
-        'low': np.random.randn(len(validate_dates)).cumsum() + 98,
-        'close': np.random.randn(len(validate_dates)).cumsum() + 101,
-        'volume': np.random.randint(1000, 10000, len(validate_dates))
+
+    # Validation data: Jul-Sep 2020 (with 1-day gap)
+    validation_start = base_date + timedelta(days=181)
+    validation_dates = pd.date_range(validation_start, validation_start + timedelta(days=90), freq='1h')
+    validation_data = pd.DataFrame({
+        'datetime': validation_dates,
+        'open': np.random.randn(len(validation_dates)).cumsum() + 100,
+        'high': np.random.randn(len(validation_dates)).cumsum() + 102,
+        'low': np.random.randn(len(validation_dates)).cumsum() + 98,
+        'close': np.random.randn(len(validation_dates)).cumsum() + 101,
+        'volume': np.random.randint(1000, 10000, len(validation_dates))
     })
-    
+
     # Test data: Oct-Dec 2020 (with 1-day gap)
-    test_start = validate_start + timedelta(days=91)
+    test_start = validation_start + timedelta(days=91)
     test_dates = pd.date_range(test_start, test_start + timedelta(days=90), freq='1h')
     test_data = pd.DataFrame({
         'datetime': test_dates,
@@ -295,8 +295,8 @@ if __name__ == "__main__":
     # Test DataSplit creation
     try:
         data_split = DataSplit(
-            train=optimize_data,
-            validation=validate_data,
+            train=train_data,
+            validation=validation_data,
             test=test_data,
             metadata=metadata
         )
