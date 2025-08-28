@@ -97,6 +97,24 @@ class ValidationEngine:
         return np.asarray(list(data), dtype=float)
 
     @staticmethod
+    def _extract_in_sample_returns(params: Dict[str, Any]) -> np.ndarray:
+        """Return combined train and validation returns for in-sample tests.
+
+        The primary interface expects ``in_sample_returns`` but callers may
+        provide explicit ``train_returns`` and ``validation_returns`` arrays.
+        When provided, those arrays are concatenated to form the in-sample
+        series.  This allows the validation engine to respect the
+        train/validation split while maintaining backward compatibility with
+        existing callers.
+        """
+
+        if "train_returns" in params or "validation_returns" in params:
+            train = np.asarray(params.get("train_returns", []), dtype=float)
+            val = np.asarray(params.get("validation_returns", []), dtype=float)
+            return np.concatenate([train, val])
+        return ValidationEngine._extract_returns(params, "in_sample_returns")
+
+    @staticmethod
     def _permutation_metric(data: np.ndarray, permutations: int, rng: np.random.Generator) -> Tuple[float, float]:
         baseline = float(np.mean(data)) if data.size else 0.0
         count = 0
@@ -110,7 +128,7 @@ class ValidationEngine:
     # -- individual tests ------------------------------------------------
 
     def _test_in_sample(self, params: Dict[str, Any], *, threshold: float = 0.0, rng: np.random.Generator) -> Tuple[float, bool]:
-        returns = self._extract_returns(params, "in_sample_returns")
+        returns = self._extract_in_sample_returns(params)
         metric = float(np.mean(returns)) if returns.size else 0.0
         return metric, metric >= threshold
 
@@ -120,7 +138,7 @@ class ValidationEngine:
         return metric, metric >= threshold
 
     def _test_in_sample_permutation(self, params: Dict[str, Any], *, permutations: int = 1000, threshold: float = 0.05, rng: np.random.Generator) -> Tuple[float, bool]:
-        data = self._extract_returns(params, "in_sample_returns")
+        data = self._extract_in_sample_returns(params)
         metric, p_value = self._permutation_metric(data, permutations, rng)
         return metric, p_value <= threshold
 
@@ -130,7 +148,7 @@ class ValidationEngine:
         return metric, p_value <= threshold
 
     def _test_noise_injection(self, params: Dict[str, Any], *, simulations: int = 100, sigma: float = 0.01, threshold: float = 0.0, rng: np.random.Generator) -> Tuple[float, bool]:
-        data = self._extract_returns(params, "in_sample_returns")
+        data = self._extract_in_sample_returns(params)
         metrics = []
         for _ in range(simulations):
             noisy = data + rng.normal(0, sigma, size=data.size)
@@ -139,7 +157,7 @@ class ValidationEngine:
         return metric, metric >= threshold
 
     def _test_monte_carlo(self, params: Dict[str, Any], *, simulations: int = 100, threshold: float = 0.0, rng: np.random.Generator) -> Tuple[float, bool]:
-        data = self._extract_returns(params, "in_sample_returns")
+        data = self._extract_in_sample_returns(params)
         metrics = []
         for _ in range(simulations):
             sample = rng.choice(data, size=data.size, replace=True) if data.size else np.array([])
@@ -148,7 +166,7 @@ class ValidationEngine:
         return metric, metric >= threshold
 
     def _test_regime_testing(self, params: Dict[str, Any], *, threshold: float = 0.0, rng: np.random.Generator) -> Tuple[float, bool]:
-        data = self._extract_returns(params, "in_sample_returns")
+        data = self._extract_in_sample_returns(params)
         if data.size < 2:
             metric = float(np.mean(data)) if data.size else 0.0
             return metric, metric >= threshold
