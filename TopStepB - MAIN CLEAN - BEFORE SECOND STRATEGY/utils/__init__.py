@@ -26,7 +26,7 @@ Module Status: COMPLETE - Foundation Layer Ready
 import sys
 import time
 import platform
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Union
 from pathlib import Path
 
 # Module metadata
@@ -35,7 +35,7 @@ __author__ = "TopStep Optimization Engine"
 
 # Import core utilities with graceful fallbacks
 try:
-    from .logger import (
+    from .logger import (  # noqa: F401
         SafeLogger, 
         ProgressTracker,
         get_logger,
@@ -64,7 +64,7 @@ except ImportError as e:
         return {'success': True}
 
 try:
-    from .exceptions import (
+    from .exceptions import (  # noqa: F401
         # Base exceptions
         TopStepOptimizationError,
         
@@ -88,9 +88,8 @@ try:
         SystemResourceError, ConfigurationError,
         
         # Utility functions
-        handle_exception, create_validation_summary, get_exception_hierarchy,
-        test_exceptions
-    )
+        handle_exception, create_validation_summary
+    )  # noqa: F401
     EXCEPTIONS_AVAILABLE = True
     
     # Create compatibility aliases for naming mismatches
@@ -528,7 +527,7 @@ def test_utils_module():
     # Test 4: Exception handling
     try:
         test_exception = TopStepOptimizationError("Test error")
-        handled = handle_exception(test_exception, "test context")
+        handle_exception(test_exception, "test context")
         print("Exception handling test passed")
         success_count += 1
     except Exception as e:
@@ -631,8 +630,7 @@ if EXCEPTIONS_AVAILABLE:
         'DataFormatException',
         
         # Utility functions
-        'handle_exception', 'create_validation_summary', 'get_exception_hierarchy',
-        'test_exceptions'
+        'handle_exception', 'create_validation_summary'
     ])
 
 # Resource manager removed - using fallback implementations

@@ -5,7 +5,6 @@ A volatility-based breakout strategy using the TTM Squeeze methodology.
 Identifies low volatility periods (squeeze) and trades the subsequent breakouts.
 """
 import pandas as pd
-import numpy as np
 import torch
 from typing import Dict, Any, Union, Tuple, List
 
@@ -162,8 +161,6 @@ class BollingerSqueezeStrategy(BaseStrategy):
         bars_since_exit = 0
 
         # Convert price data and inputs to tensors
-        high_prices = torch.as_tensor(data['high'].to_numpy(), device=device, dtype=torch.float32)
-        low_prices = torch.as_tensor(data['low'].to_numpy(), device=device, dtype=torch.float32)
         close_prices = torch.as_tensor(data['close'].to_numpy(), device=device, dtype=torch.float32)
         entry_tensor = torch.as_tensor(entry_signals.to_numpy(), device=device, dtype=torch.int8)
 

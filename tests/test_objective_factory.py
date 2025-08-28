@@ -1,3 +1,7 @@
+"""Tests for ObjectiveFactory behavior."""
+
+# ruff: noqa: E402
+
 import sys
 import types
 import pandas as pd

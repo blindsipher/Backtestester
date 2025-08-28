@@ -13,6 +13,8 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from utils.timezone_utils import ensure_datetime_column
+
 # ARCHITECTURAL FIX: Remove constants.py dependency - define constants locally
 DATA_EXTENSIONS = {'.csv', '.parquet'}  # Supported data file extensions
 SEARCH_PATTERNS = ['*.csv', '*.parquet']  # File search patterns
@@ -20,12 +22,10 @@ MAX_DISPLAYED_FILES = 10  # Maximum files to display in selection
 FILE_SIZE_MB_DIVISOR = 1024 * 1024  # Bytes to MB conversion
 SYNTHETIC_START_DATE = '2023-01-01'  # Default start date for synthetic data
 
-from utils.timezone_utils import ensure_datetime_column
-
 # Try to import tkinter for file dialogs
 try:
     import tkinter as tk
-    from tkinter import filedialog, messagebox
+    from tkinter import filedialog
     TKINTER_AVAILABLE = True
 except ImportError:
     TKINTER_AVAILABLE = False
@@ -216,7 +216,7 @@ class InteractiveDataLoader:
             try:
                 size_mb = file_path.stat().st_size / FILE_SIZE_MB_DIVISOR
                 print(f"{i:2d}. {file_path.name} ({size_mb:.1f} MB)")
-            except:
+            except OSError:
                 print(f"{i:2d}. {file_path.name}")
         
         print(f"{len(found_files) + 1:2d}. Enter custom path")

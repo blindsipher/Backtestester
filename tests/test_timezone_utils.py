@@ -4,13 +4,13 @@ from utils import timezone_utils as tz
 
 
 def test_convert_to_target_timezone_naive_series():
-    series = pd.Series(pd.date_range("2024-01-01", periods=2, freq="H"))
+    series = pd.Series(pd.date_range("2024-01-01", periods=2, freq="h"))
     converted = tz.convert_to_target_timezone(series)
     assert str(converted.dt.tz) == tz.TARGET_TIMEZONE
 
 
 def test_convert_datetime_index_to_column():
-    index = pd.date_range("2024-01-01", periods=2, freq="H", tz="UTC")
+    index = pd.date_range("2024-01-01", periods=2, freq="h", tz="UTC")
     df = pd.DataFrame({"value": [1, 2]}, index=index)
     result = tz.convert_datetime_index_to_column(df)
     assert "datetime" in result.columns

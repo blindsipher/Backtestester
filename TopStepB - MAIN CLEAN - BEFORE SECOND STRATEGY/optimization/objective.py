@@ -2014,12 +2014,7 @@ class ObjectiveFactory:
             return {'metrics': metrics}
             
         except Exception as e:
-            # Robust logging to prevent scope issues
-            try:
-                logging.getLogger(__name__).warning(f"Simplified backtest failed: {e}")
-            except NameError:
-                import logging
-                logging.getLogger(__name__).warning(f"Simplified backtest failed: {e}")
+            logging.getLogger(__name__).warning(f"Simplified backtest failed: {e}")
             return {'metrics': self._get_zero_trade_metrics()}
     
     def _get_zero_trade_metrics(self) -> Dict[str, float]:

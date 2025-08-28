@@ -1,4 +1,3 @@
-import pytest
 from utils.error_handling import (
     ErrorResultFactory,
     log_and_return_error,

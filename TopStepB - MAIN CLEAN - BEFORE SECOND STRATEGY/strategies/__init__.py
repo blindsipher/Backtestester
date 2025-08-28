@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Dict, Type, Optional
 
 from .base import BaseStrategy
-from utils.exceptions import StrategyConfigurationError
 
 logger = logging.getLogger(__name__)
 

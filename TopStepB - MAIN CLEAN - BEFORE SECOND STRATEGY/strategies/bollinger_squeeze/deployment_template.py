@@ -5,6 +5,9 @@ Perfect Bollinger Squeeze Live Trading Strategy
 Optimized for bar-by-bar ingestion and real-time trading execution.
 All logic self-contained with efficient stateful calculations.
 """
+
+# ruff: noqa
+
 import math
 from collections import deque
 
