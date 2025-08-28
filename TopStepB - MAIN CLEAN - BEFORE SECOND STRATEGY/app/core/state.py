@@ -6,7 +6,7 @@ Central dataclass for managing all pipeline state across modules.
 Clean state container that flows through all phases.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, List
 import pandas as pd
 from datetime import datetime
@@ -48,6 +48,11 @@ class PipelineState:
     memory_per_worker_mb: int = 1500
     timeout_per_trial: int = 60
     results_top_n: int = 10
+
+    # Validation Configuration - which tests to execute
+    validation_tests: List[str] = field(
+        default_factory=lambda: ["in_sample", "out_of_sample"]
+    )
     
     
     # Runtime State (populated during pipeline execution)
