@@ -23,6 +23,7 @@ handling deployment injection (separate deployment module responsibility).
 import logging
 import time
 import signal
+import multiprocessing as mp
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from pathlib import Path
@@ -564,7 +565,7 @@ class OptunaEngine:
             # Try to salvage partial results
             try:
                 return self._process_optimization_results(state, {})
-            except:
+            except Exception:
                 pass
         
         return {

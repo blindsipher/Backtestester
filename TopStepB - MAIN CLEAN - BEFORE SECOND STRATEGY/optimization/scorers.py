@@ -468,7 +468,6 @@ class CompositeScore:
         
         # INSTITUTIONAL FIX: Use dollar-based bounds instead of percentage bounds
         # For ES futures: $0 (excellent) to $5000 (poor) based on institutional research
-        dollar_dd_min = 0.0      # Excellent (no drawdown)
         dollar_dd_max = 5000.0   # Poor (10% drawdown on $50K account)
         
         # Invert for scoring (lower drawdown = higher score)

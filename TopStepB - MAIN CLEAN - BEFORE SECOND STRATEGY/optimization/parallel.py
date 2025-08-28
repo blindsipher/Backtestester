@@ -360,7 +360,7 @@ class ParallelOptimizer:
                     try:
                         process = psutil.Process()
                         memory_usage = int(process.memory_info().rss / (1024 * 1024))
-                    except:
+                    except Exception:
                         memory_usage = 512  # Fallback
                     cpu_percent = psutil.cpu_percent(interval=1)
                     

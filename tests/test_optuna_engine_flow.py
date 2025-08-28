@@ -1,7 +1,10 @@
+"""Tests for OptunaEngine flow."""
+
+# ruff: noqa: E402
+
 import sys
 import types
 import pandas as pd
-import pytest
 
 # Provide minimal torch and psutil stubs before importing modules that require them
 torch_stub = types.SimpleNamespace(cuda=types.SimpleNamespace(is_available=lambda: False, set_device=lambda x: None))

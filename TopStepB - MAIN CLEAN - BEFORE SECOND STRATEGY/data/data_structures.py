@@ -70,9 +70,7 @@ class DataSplit:
             # Check gap_days configuration for temporal ordering rules
             gap_days = self.metadata.get('gap_days', 1) if hasattr(self, 'metadata') and self.metadata else 1
             
-            # Determine comparison operators based on gap_days setting
-            # gap_days=0: allow adjacent periods (>), gap_days>0: enforce strict gaps (>=)
-            comparison_op = ">" if gap_days == 0 else ">="
+            # Determine gap description based on gap_days setting
             gap_desc = "after or at" if gap_days == 0 else "before"
             
             # Validate train->validation ordering
