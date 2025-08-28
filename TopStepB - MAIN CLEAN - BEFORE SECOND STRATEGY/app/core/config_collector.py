@@ -47,6 +47,11 @@ def collect_cli_config() -> Optional[PipelineState]:
     parser.add_argument('--memory-per-worker-mb', type=int, default=1500, help='Memory limit per worker in MB (default: 1500)')
     parser.add_argument('--timeout-per-trial', type=int, default=60, help='Maximum seconds per trial (default: 60)')
     parser.add_argument('--results-top-n', type=int, default=10, help='Number of top results to return (default: 10)')
+    parser.add_argument(
+        '--validation-tests',
+        default='in_sample,out_of_sample',
+        help='Comma-separated list of validation tests to run or "all"'
+    )
     
     # Parse arguments
     try:
@@ -67,6 +72,10 @@ def collect_cli_config() -> Optional[PipelineState]:
         # CLI accepts both "walk-forward" and "walk_forward" but system expects "walk_forward"
         normalized_split_type = args.split_type.replace('-', '_')
         
+        validation_tests = [
+            t.strip() for t in args.validation_tests.split(',') if t.strip()
+        ]
+
         return PipelineState(
             strategy_name=args.strategy,
             symbol=args.symbol,
@@ -83,7 +92,8 @@ def collect_cli_config() -> Optional[PipelineState]:
             max_workers=validated_workers,
             memory_per_worker_mb=args.memory_per_worker_mb,
             timeout_per_trial=args.timeout_per_trial,
-            results_top_n=args.results_top_n
+            results_top_n=args.results_top_n,
+            validation_tests=validation_tests
         )
         
     except SystemExit:

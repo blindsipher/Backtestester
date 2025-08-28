@@ -183,9 +183,25 @@ def orchestrate_pipeline(state: PipelineState) -> Dict[str, Any]:
         # Phase 6: Validation - run basic validation on parameter sets
         if state.best_parameters:
             state.update_phase("validation")
-            from validation import ValidationEngine, ValidationConfig
+            from validation import (
+                ValidationEngine,
+                ValidationConfig,
+                ValidationTestConfig,
+            )
 
-            val_engine = ValidationEngine(ValidationConfig())
+            val_config = ValidationConfig()
+            selected_tests = set(state.validation_tests or [])
+            if "all" in selected_tests:
+                selected_tests = {
+                    name
+                    for name, cfg in val_config.__dict__.items()
+                    if isinstance(cfg, ValidationTestConfig)
+                }
+            for name, cfg in val_config.__dict__.items():
+                if isinstance(cfg, ValidationTestConfig):
+                    cfg.enabled = name in selected_tests
+
+            val_engine = ValidationEngine(val_config)
             state.validation_results = val_engine.run(state.best_parameters)
         else:
             state.validation_results = []
