@@ -254,8 +254,23 @@ class BollingerSqueezeStrategy(BaseStrategy):
                         bars_in_trade = 0
                         bars_since_exit = 0
                         entry_type = "long" if position == 1 else "short"
+                        entry_price_val = (
+                            entry_price.item()
+                            if hasattr(entry_price, "item")
+                            else entry_price
+                        )
+                        stop_loss_val = (
+                            stop_loss.item()
+                            if hasattr(stop_loss, "item")
+                            else stop_loss
+                        )
+                        target_price_val = (
+                            target_price.item()
+                            if hasattr(target_price, "item")
+                            else target_price
+                        )
                         self._debug_logger.debug(
-                            f"Bar {i}: {entry_type} entry at open price {entry_price.item()}, stop: {stop_loss.item()}, target: {target_price.item()}"
+                            f"Bar {i}: {entry_type} entry at open price {entry_price_val}, stop: {stop_loss_val}, target: {target_price_val}"
                         )
 
             final_signals[i] = position

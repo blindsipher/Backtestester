@@ -154,11 +154,11 @@ class DeploymentEngine:
     def _find_deployment_template(self, strategy_name: str) -> Dict[str, Any]:
         """Find the deployment template for the given strategy."""
         
-        # Standard template path pattern
+        base_path = Path(__file__).resolve().parent.parent
         template_paths = [
-            Path(f"strategies/{strategy_name}/deployment_template.py"),
-            Path(f"strategies/{strategy_name.lower()}/deployment_template.py"),
-            Path(f"strategies/{strategy_name}/template.py"),
+            base_path / f"strategies/{strategy_name}/deployment_template.py",
+            base_path / f"strategies/{strategy_name.lower()}/deployment_template.py",
+            base_path / f"strategies/{strategy_name}/template.py",
         ]
         
         for template_path in template_paths:
