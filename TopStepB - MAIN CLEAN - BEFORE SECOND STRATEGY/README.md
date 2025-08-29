@@ -1,6 +1,14 @@
 # TOPSTEPB - Institutional CME Futures Trading System
-**Status**: ✅ **GOLD STANDARD BACKTEST-TO-LIVE CONSISTENCY ACHIEVED**  
+**Status**: ✅ **GOLD STANDARD BACKTEST-TO-LIVE CONSISTENCY ACHIEVED**
 **Version**: 3.0 - Perfect Execution Timing Alignment (4/7 Phases Complete + Critical Fixes)
+
+## Program Overview and Current State
+
+TopStepB is a modular trading research pipeline for CME futures that orchestrates data loading, strategy discovery, trading configuration, chronological data splitting, parameter optimization with Optuna, extensive validation, analytics/packaging, and deployment. The pipeline opportunistically leverages GPU acceleration for indicator computations and optimization workers when CUDA is available, with seamless CPU fallback otherwise.
+
+During a recent run using `python main_runner.py --synthetic-bars 10000 --max-trials 20 --validation-tests all`, the system generated ten candidate parameter sets. Every validation stage executed, though permutation tests rejected each candidate, signaling the need for additional refinement. The automated test suite (`pytest -q`) passes.
+
+Currently, Data, Strategy, Optimization, and Deployment phases are fully operational. Validation offers multiple robustness checks but is still evolving, while Analytics and Packaging modules remain under development.
 
 ---
 # CLAUDE.md
