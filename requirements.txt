@@ -5,3 +5,6 @@ psycopg2-binary
 scikit-learn
 scipy
 torch
+quantstats
+ipython
+psutil

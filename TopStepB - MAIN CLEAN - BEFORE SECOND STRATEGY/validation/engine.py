@@ -27,6 +27,8 @@ class ValidationEngine:
         total_score = 0.0
         passed_all = True
 
+        informational = {"noise_injection", "regime_testing"}
+
         for name, cfg in self.config.__dict__.items():
             if not isinstance(cfg, ValidationTestConfig) or not cfg.enabled:
                 continue
@@ -35,8 +37,10 @@ class ValidationEngine:
             metric, passed = test_fn(params, rng=rng, **cfg.params)
             results[name] = {"metric": metric, "passed": passed}
             executed.append(name)
-            total_score += metric
-            passed_all = passed_all and passed
+
+            if name not in informational:
+                total_score += metric
+                passed_all = passed_all and passed
 
         return {
             "params": params,

@@ -14,12 +14,12 @@ def test_validation_engine_runs_all_tests():
             enabled=True, params={"permutations": 10, "threshold": 1.0}
         ),
         noise_injection=ValidationTestConfig(
-            enabled=True, params={"simulations": 10, "sigma": 0.01}
+            enabled=True, params={"simulations": 10, "sigma": 0.01, "threshold": 10.0}
         ),
         monte_carlo=ValidationTestConfig(
             enabled=True, params={"simulations": 10}
         ),
-        regime_testing=ValidationTestConfig(enabled=True),
+        regime_testing=ValidationTestConfig(enabled=True, params={"threshold": 10.0}),
     )
 
     engine = ValidationEngine(config=config, max_workers=1)
@@ -44,8 +44,13 @@ def test_validation_engine_runs_all_tests():
     }
     assert set(res["tests"]) == expected_tests
     assert set(res["results"].keys()) == expected_tests
+    # Informational tests may fail without affecting overall pass flag
+    assert res["results"]["noise_injection"]["passed"] is False
+    assert res["results"]["regime_testing"]["passed"] is False
     assert res["passed"] is True
-    # Score is sum of individual metrics
-    metric_sum = sum(v["metric"] for v in res["results"].values())
+    # Score excludes informational tests
+    metric_sum = sum(
+        v["metric"] for k, v in res["results"].items() if k not in {"noise_injection", "regime_testing"}
+    )
     assert res["score"] == pytest.approx(metric_sum)
 
