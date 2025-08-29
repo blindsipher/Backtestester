@@ -29,7 +29,8 @@ import sys
 # Use function parameter defaults instead of global constants
 
 # Import the new DataSplit structure
-sys.path.append(str(Path(__file__).parent))
+# Use absolute path resolution for cross-platform compatibility
+sys.path.append(str(Path(__file__).resolve().parent))
 from data_structures import DataSplit
 
 logger = logging.getLogger(__name__)
