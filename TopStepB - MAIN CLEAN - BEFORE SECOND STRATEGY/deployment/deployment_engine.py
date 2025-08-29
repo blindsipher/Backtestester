@@ -155,10 +155,12 @@ class DeploymentEngine:
         """Find the deployment template for the given strategy."""
         
         base_path = Path(__file__).resolve().parent.parent
+        strategies_dir = base_path / "strategies"
+
         template_paths = [
-            base_path / f"strategies/{strategy_name}/deployment_template.py",
-            base_path / f"strategies/{strategy_name.lower()}/deployment_template.py",
-            base_path / f"strategies/{strategy_name}/template.py",
+            strategies_dir / strategy_name / "deployment_template.py",
+            strategies_dir / strategy_name.lower() / "deployment_template.py",
+            strategies_dir / strategy_name / "template.py",
         ]
         
         for template_path in template_paths:
